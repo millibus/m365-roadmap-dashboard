@@ -77,6 +77,31 @@ body {
     letter-spacing: 0.5px;
 }
 
+/* Refresh Status */
+.refresh-status {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(96, 94, 92, 0.2);
+}
+
+.refresh-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #605e5c;
+    justify-content: center;
+}
+
+.refresh-info i {
+    color: #0078d4;
+}
+
+.divider {
+    color: #c8c6c4;
+    margin: 0 0.25rem;
+}
+
 /* Controls */
 .controls {
     background: rgba(255, 255, 255, 0.9);

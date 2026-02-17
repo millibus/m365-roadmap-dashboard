@@ -466,6 +466,57 @@ class M365RoadmapDashboard {
         const rollingOut = this.allData.filter(item => 
             item.status === 'Rolling out' || item.status === 'General Availability').length;
         document.getElementById('rolling-out').textContent = rollingOut;
+        
+        this.updateRefreshStatus();
+    }
+    
+    updateRefreshStatus() {
+        const cachedData = this.getCachedData();
+        const lastUpdateElement = document.getElementById('last-update');
+        
+        if (cachedData && cachedData.timestamp) {
+            const lastUpdate = new Date(cachedData.timestamp);
+            const now = new Date();
+            const diffMinutes = Math.floor((now - lastUpdate) / (1000 * 60));
+            
+            let timeAgo;
+            if (diffMinutes < 1) {
+                timeAgo = 'just now';
+            } else if (diffMinutes < 60) {
+                timeAgo = `${diffMinutes}m ago`;
+            } else if (diffMinutes < 1440) { // 24 hours
+                const hours = Math.floor(diffMinutes / 60);
+                timeAgo = `${hours}h ago`;
+            } else {
+                const days = Math.floor(diffMinutes / 1440);
+                timeAgo = `${days}d ago`;
+            }
+            
+            lastUpdateElement.textContent = `Last updated: ${timeAgo}`;
+        } else {
+            lastUpdateElement.textContent = 'Last updated: Unknown';
+        }
+        
+        // Calculate next update time (5:00 AM PT daily)
+        const nextUpdate = this.getNextUpdateTime();
+        const nextUpdateElement = document.getElementById('next-update');
+        nextUpdateElement.textContent = `Next update: ${nextUpdate}`;
+    }
+    
+    getNextUpdateTime() {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(5, 0, 0, 0); // 5:00 AM
+        
+        // Convert to PT (UTC-8)
+        const ptTime = new Date(tomorrow.getTime() - (8 * 60 * 60 * 1000));
+        
+        return ptTime.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short', 
+            day: 'numeric'
+        }) + ' at 5:00 AM PT';
     }
     
     updateResultsInfo() {
