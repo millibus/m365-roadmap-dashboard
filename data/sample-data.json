@@ -1,0 +1,201 @@
+{
+  "metadata": {
+    "lastUpdated": "2026-02-17T19:15:00.000Z",
+    "totalItems": 5,
+    "apiSource": "https://www.microsoft.com/releasecommunications/api/v1/m365",
+    "version": "1.0.0"
+  },
+  "items": [
+    {
+      "id": 557348,
+      "title": "Microsoft Copilot (Microsoft 365): Infinite Scroll Chat History",
+      "description": "Infinite scroll enables users to continuously browse older chat sessions by automatically loading additional conversations as they scroll. This creates a smoother, more modern chat history experience",
+      "moreInfoLink": null,
+      "publicDisclosureAvailabilityDate": "March CY2026",
+      "publicPreviewDate": "",
+      "created": "2026-02-13T23:15:55",
+      "publicRoadmapStatus": "Include this month",
+      "status": "In development",
+      "modified": "2026-02-13T23:15:55",
+      "locale": null,
+      "tags": [
+        {"tagName": "Worldwide (Standard Multi-Tenant)"},
+        {"tagName": "Web"},
+        {"tagName": "Microsoft Copilot (Microsoft 365)"},
+        {"tagName": "General Availability"}
+      ],
+      "tagsContainer": {
+        "products": [
+          {"tagName": "Microsoft Copilot (Microsoft 365)"}
+        ],
+        "cloudInstances": [
+          {"tagName": "Worldwide (Standard Multi-Tenant)"}
+        ],
+        "releasePhase": [
+          {"tagName": "General Availability"}
+        ],
+        "platforms": [
+          {"tagName": "Web"}
+        ]
+      }
+    },
+    {
+      "id": 557254,
+      "title": "Outlook: Add support for Recommended Labels in Outlook mobile",
+      "description": "When composing an email on your mobile device, Outlook can recommend or automatically apply an appropriate sensitivity label if your organization's automatic or recommended labeling policies are enabled by admins and the message contains sensitive information. For recommended labels, you'll see a prompt to review and apply the suggested label, and automatic labels will be applied without needing any action from you.",
+      "moreInfoLink": null,
+      "publicDisclosureAvailabilityDate": "March CY2026",
+      "publicPreviewDate": "",
+      "created": "2026-02-13T23:15:55",
+      "publicRoadmapStatus": "Include this month",
+      "status": "In development",
+      "modified": "2026-02-13T23:15:55",
+      "locale": null,
+      "tags": [
+        {"tagName": "Worldwide (Standard Multi-Tenant)"},
+        {"tagName": "Android"},
+        {"tagName": "Outlook"},
+        {"tagName": "General Availability"}
+      ],
+      "tagsContainer": {
+        "products": [
+          {"tagName": "Outlook"}
+        ],
+        "cloudInstances": [
+          {"tagName": "Worldwide (Standard Multi-Tenant)"}
+        ],
+        "releasePhase": [
+          {"tagName": "General Availability"}
+        ],
+        "platforms": [
+          {"tagName": "Android"}
+        ]
+      }
+    },
+    {
+      "id": 557168,
+      "title": "Microsoft Teams: Book future meetings directly from Teams panels",
+      "description": "You can now make an upcoming meeting reservation from a Teams panel by browsing the calendar on the device and choosing any open time slot through midnight the next day. Add a guest during booking streamlining ad-hoc scheduling and coordination. Available with Teams Rooms Pro and Shared Device licenses.",
+      "moreInfoLink": null,
+      "publicDisclosureAvailabilityDate": "April CY2026",
+      "publicPreviewDate": "",
+      "created": "2026-02-13T23:15:55",
+      "publicRoadmapStatus": "Include this month",
+      "status": "In development",
+      "modified": "2026-02-13T23:15:55",
+      "locale": null,
+      "tags": [
+        {"tagName": "Worldwide (Standard Multi-Tenant)"},
+        {"tagName": "Android"},
+        {"tagName": "Microsoft Teams"},
+        {"tagName": "General Availability"}
+      ],
+      "tagsContainer": {
+        "products": [
+          {"tagName": "Microsoft Teams"}
+        ],
+        "cloudInstances": [
+          {"tagName": "Worldwide (Standard Multi-Tenant)"}
+        ],
+        "releasePhase": [
+          {"tagName": "General Availability"}
+        ],
+        "platforms": [
+          {"tagName": "Android"}
+        ]
+      }
+    },
+    {
+      "id": 557177,
+      "title": "Microsoft Copilot (Microsoft 365): Agent Mode in PowerPoint",
+      "description": "Agent Mode in PowerPoint lets you create, edit, and refine presentations through natural conversation, directly in your presentation. You can start a new presentation or build on an existing one, asking Copilot to generate slides, update content, improve layouts, and polish design—while preserving formatting, structure, and branding. Copilot uses your files, meetings, emails, and more to help shape content and iterate quickly, and it connects to your brand kit so you can apply branded templates, insert brand approved images, and check for brand compliance. Available to Microsoft 365 Copilot–licensed users.",
+      "moreInfoLink": null,
+      "publicDisclosureAvailabilityDate": "March CY2026",
+      "publicPreviewDate": "",
+      "created": "2026-02-12T00:15:53",
+      "publicRoadmapStatus": "Include this month",
+      "status": "In development",
+      "modified": "2026-02-12T00:15:53",
+      "locale": null,
+      "tags": [
+        {"tagName": "Worldwide (Standard Multi-Tenant)"},
+        {"tagName": "Mac"},
+        {"tagName": "PowerPoint"},
+        {"tagName": "Microsoft Copilot (Microsoft 365)"},
+        {"tagName": "General Availability"}
+      ],
+      "tagsContainer": {
+        "products": [
+          {"tagName": "PowerPoint"},
+          {"tagName": "Microsoft Copilot (Microsoft 365)"}
+        ],
+        "cloudInstances": [
+          {"tagName": "Worldwide (Standard Multi-Tenant)"}
+        ],
+        "releasePhase": [
+          {"tagName": "General Availability"}
+        ],
+        "platforms": [
+          {"tagName": "Mac"}
+        ]
+      }
+    },
+    {
+      "id": 557174,
+      "title": "OneDrive: Microsoft 365 Copilot in OneDrive",
+      "description": "We're excited to bring M365 Copilot in OneDrive, a new unified Copilot chat experience designed to make working with your files simpler, smarter, and more seamless across Microsoft 365.",
+      "moreInfoLink": null,
+      "publicDisclosureAvailabilityDate": "April CY2026",
+      "publicPreviewDate": "",
+      "created": "2026-02-12T00:15:53",
+      "publicRoadmapStatus": "Include this month",
+      "status": "In development",
+      "modified": "2026-02-12T00:15:53",
+      "locale": null,
+      "tags": [
+        {"tagName": "Worldwide (Standard Multi-Tenant)"},
+        {"tagName": "Web"},
+        {"tagName": "OneDrive"},
+        {"tagName": "Microsoft Copilot (Microsoft 365)"},
+        {"tagName": "General Availability"}
+      ],
+      "tagsContainer": {
+        "products": [
+          {"tagName": "OneDrive"},
+          {"tagName": "Microsoft Copilot (Microsoft 365)"}
+        ],
+        "cloudInstances": [
+          {"tagName": "Worldwide (Standard Multi-Tenant)"}
+        ],
+        "releasePhase": [
+          {"tagName": "General Availability"}
+        ],
+        "platforms": [
+          {"tagName": "Web"}
+        ]
+      }
+    }
+  ],
+  "statistics": {
+    "byStatus": {
+      "In development": 5
+    },
+    "byProduct": {
+      "Microsoft Copilot (Microsoft 365)": 4,
+      "Outlook": 1,
+      "Microsoft Teams": 1,
+      "PowerPoint": 1,
+      "OneDrive": 1
+    },
+    "byPlatform": {
+      "Web": 2,
+      "Android": 2,
+      "Mac": 1
+    },
+    "byQuarter": {
+      "2026 Q1": 4,
+      "2026 Q2": 1
+    },
+    "totalItems": 5
+  }
+}

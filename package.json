@@ -1,0 +1,46 @@
+{
+  "name": "m365-roadmap-dashboard",
+  "version": "1.0.0",
+  "description": "A modern, responsive web dashboard for visualizing Microsoft 365's public roadmap data",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve . -p 8000",
+    "dev": "npx serve . -p 8000 --reload",
+    "update-data": "node scripts/update-data.js",
+    "update": "scripts/update.sh",
+    "update-deploy": "scripts/update.sh --deploy",
+    "build": "node scripts/update-data.js",
+    "test": "node scripts/test-setup.js",
+    "validate": "node scripts/validate-data.js"
+  },
+  "keywords": [
+    "microsoft-365",
+    "roadmap",
+    "dashboard",
+    "visualization",
+    "github-pages",
+    "static-site",
+    "responsive",
+    "m365"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/m365-roadmap-dashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/m365-roadmap-dashboard/issues"
+  },
+  "homepage": "https://your-username.github.io/m365-roadmap-dashboard/",
+  "devDependencies": {},
+  "dependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "defaults",
+    "not ie 11",
+    "not op_mini all"
+  ]
+}
