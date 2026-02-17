@@ -98,26 +98,27 @@ class M365RoadmapDashboard {
         this.showLoading();
         
         try {
-            // Try to load from local cache first
-            const cachedData = this.getCachedData();
-            if (cachedData && this.isCacheValid(cachedData.timestamp)) {
-                this.allData = cachedData.data;
-                this.processData();
-                this.hideLoading();
-                return;
-            }
-            
-            // Fetch from API
-            const response = await fetch('https://www.microsoft.com/releasecommunications/api/v1/m365');
+            // Try to load from local data files first (GitHub Pages deployment)
+            let response = await fetch('data/roadmap-data.json');
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // Fallback to compact data if main file fails
+                response = await fetch('data/roadmap-data-compact.json');
+            }
+            
+            if (!response.ok) {
+                // Final fallback to sample data for development
+                response = await fetch('data/sample-data.json');
+            }
+            
+            if (!response.ok) {
+                throw new Error(`Failed to load data files: ${response.status}`);
             }
             
             const data = await response.json();
             this.allData = data;
             
-            // Cache the data
+            // Cache the data with current timestamp
             this.setCachedData(data);
             
             this.processData();
@@ -126,7 +127,7 @@ class M365RoadmapDashboard {
         } catch (error) {
             console.error('Error loading data:', error);
             
-            // Try to use cached data even if expired
+            // Try to use cached data as final fallback
             const cachedData = this.getCachedData();
             if (cachedData) {
                 this.allData = cachedData.data;
