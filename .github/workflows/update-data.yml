@@ -1,0 +1,35 @@
+name: Update Roadmap Data
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch:      # Manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update roadmap data
+        run: node scripts/update-data.js
+        env:
+          OUTPUT_DIR: './data'
+          LOG_LEVEL: 'info'
+
+      - name: Commit updated data
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/roadmap-data.json data/roadmap-data-compact.json data/update-report.json data/health-status.json
+          git diff --staged --quiet || git commit -m "chore: update roadmap data [skip ci]"
+          git push

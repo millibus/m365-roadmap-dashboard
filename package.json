@@ -10,8 +10,16 @@
     "update": "scripts/update.sh",
     "update-deploy": "scripts/update.sh --deploy",
     "build": "node scripts/update-data.js",
-    "test": "node scripts/test-setup.js",
-    "validate": "node scripts/validate-data.js"
+    "preflight": "node scripts/preflight.js",
+    "test:unit": "node tests/unit/update-data.test.js && node tests/unit/app-filters.test.js",
+    "test": "npm run test:unit && node scripts/test-setup.js",
+    "validate": "node scripts/validate-data.js",
+    "health:check": "node scripts/health-check.js",
+    "lint": "node scripts/lint.js",
+    "security:policy": "node scripts/security-policy-check.js",
+    "security:audit": "npm install --package-lock-only --ignore-scripts --no-audit --fund=false && npm audit --omit=dev --audit-level=high",
+    "security:scan": "npm run security:policy && npm run security:audit",
+    "ci": "npm run validate && npm run health:check && npm test && npm run lint && npm run security:scan"
   },
   "keywords": [
     "microsoft-365",
@@ -27,12 +35,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-username/m365-roadmap-dashboard.git"
+    "url": "git+https://github.com/millibus/m365-roadmap-dashboard.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/m365-roadmap-dashboard/issues"
+    "url": "https://github.com/millibus/m365-roadmap-dashboard/issues"
   },
-  "homepage": "https://your-username.github.io/m365-roadmap-dashboard/",
+  "homepage": "https://millibus.github.io/m365-roadmap-dashboard/",
   "devDependencies": {},
   "dependencies": {},
   "engines": {

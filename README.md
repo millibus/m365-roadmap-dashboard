@@ -44,7 +44,7 @@ A modern, responsive web dashboard for visualizing Microsoft 365's public roadma
 1. **Fork this repository**
    ```bash
    # Click "Fork" on GitHub or use GitHub CLI
-   gh repo fork your-username/m365-roadmap-dashboard
+   gh repo fork millibus/m365-roadmap-dashboard
    ```
 
 2. **Enable GitHub Pages**
@@ -53,13 +53,13 @@ A modern, responsive web dashboard for visualizing Microsoft 365's public roadma
    - Branch: `main` (or `gh-pages` if using automated updates)
 
 3. **Access your dashboard**
-   - URL: `https://your-username.github.io/m365-roadmap-dashboard/`
+   - URL: `https://millibus.github.io/m365-roadmap-dashboard/`
 
 ### Option 2: Local Development
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/m365-roadmap-dashboard.git
+   git clone https://github.com/millibus/m365-roadmap-dashboard.git
    cd m365-roadmap-dashboard
    ```
 
@@ -107,6 +107,10 @@ For automated updates, you can configure these environment variables:
 # Data Update Configuration
 OUTPUT_DIR="./data"                    # Data directory
 LOG_LEVEL="info"                      # Logging level (debug|info|warn|error)
+FETCH_TIMEOUT_MS="30000"              # API request timeout
+FETCH_RETRY_COUNT="3"                 # Retries after initial fetch failure
+BACKUP_RETENTION_COUNT="10"           # Number of timestamped data backups to keep
+HEALTH_MAX_AGE_HOURS="8"              # Max allowed age for last successful update
 
 # GitHub Pages Deployment
 GITHUB_TOKEN="ghp_your_token_here"    # GitHub personal access token
@@ -126,6 +130,18 @@ node update-data.js
 
 # Or use the automated script
 ./update.sh
+```
+
+The update pipeline emits operational diagnostics:
+
+- `data/health-status.json` (compact health/status artifact)
+- `data/update-report.json` (detailed update metadata)
+- `logs/last-update-summary.json` (shell summary from `update.sh`)
+
+Validate health and freshness after updates:
+
+```bash
+npm run health:check
 ```
 
 ### Automated Updates
@@ -296,6 +312,23 @@ localStorage.setItem('debug', 'true');
 location.reload();
 ```
 
+## 🛠️ Operations Runbooks
+
+For production-style operations and recovery playbooks, use:
+
+- **[docs/OPERATIONS-RUNBOOK.md](docs/OPERATIONS-RUNBOOK.md)** for:
+  - manual recovery from bad data pulls
+  - rollback of generated data artifacts
+  - freshness/correctness verification checklist
+  - required health artifact checks before deploy
+
+Quick health check command:
+
+```bash
+npm run health:check
+jq . data/health-status.json
+```
+
 ## 🚀 Deployment Options
 
 ### GitHub Pages (Static)
@@ -330,11 +363,29 @@ aws cloudfront create-invalidation --distribution-id YOUR_ID --paths "/*"
 
 We welcome contributions! Here's how to help:
 
+### Preflight and multi-agent workflow
+
+Before starting work, run **preflight** to verify repo and git state:
+
+```bash
+npm run preflight
+```
+
+Before opening a PR or merging shared-lane work, run:
+
+```bash
+npm run validate
+npm run health:check
+npm test
+```
+
+For branch naming, rebasing, conflict rules, merge strategy, file ownership, and optional worktrees when multiple agents work in parallel, see **[docs/CONTRIBUTOR-WORKFLOW.md](docs/CONTRIBUTOR-WORKFLOW.md)**.
+
 ### Development Setup
 
 1. **Fork and clone**
    ```bash
-   git clone https://github.com/your-username/m365-roadmap-dashboard.git
+   git clone https://github.com/millibus/m365-roadmap-dashboard.git
    cd m365-roadmap-dashboard
    ```
 
@@ -378,8 +429,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🙋 Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/m365-roadmap-dashboard/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/m365-roadmap-dashboard/discussions)
+- **Issues**: [GitHub Issues](https://github.com/millibus/m365-roadmap-dashboard/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/millibus/m365-roadmap-dashboard/discussions)
 - **Documentation**: This README and inline code comments
 
 ## 🌟 Acknowledgments
