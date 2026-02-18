@@ -123,6 +123,72 @@ class RoadmapDataUpdater {
         throw lastError;
     }
 
+    /**
+     * Compare new items against the previous snapshot to detect NEW and UPDATED items.
+     * Mutates items in-place by adding _changeType and _changedFields properties.
+     */
+    detectChanges(newItems) {
+        const dataPath = path.join(this.outputDir, 'roadmap-data.json');
+        let prevItems = [];
+        try {
+            if (fs.existsSync(dataPath)) {
+                const raw = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+                prevItems = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.items) ? raw.items : []);
+            }
+        } catch (err) {
+            this.log('warn', 'Could not read previous data for change detection:', err.message);
+        }
+
+        // If no previous data, mark everything unchanged (avoid false positives on first run)
+        if (prevItems.length === 0) {
+            for (const item of newItems) {
+                item._changeType = 'unchanged';
+                item._changedFields = [];
+            }
+            return;
+        }
+
+        const prevMap = new Map(prevItems.map(i => [i.id, i]));
+        const comparedFields = ['title', 'description', 'status', 'publicDisclosureAvailabilityDate'];
+
+        for (const item of newItems) {
+            const prev = prevMap.get(item.id);
+            if (!prev) {
+                item._changeType = 'new';
+                item._changedFields = [];
+                continue;
+            }
+
+            const changedFields = [];
+            for (const field of comparedFields) {
+                const newVal = item[field] != null ? String(item[field]) : '';
+                const oldVal = prev[field] != null ? String(prev[field]) : '';
+                if (newVal !== oldVal) {
+                    changedFields.push(field);
+                }
+            }
+
+            // Compare tagsContainer via JSON.stringify
+            const newTags = JSON.stringify(item.tagsContainer || {});
+            const oldTags = JSON.stringify(prev.tagsContainer || {});
+            if (newTags !== oldTags) {
+                changedFields.push('tagsContainer');
+            }
+
+            if (changedFields.length > 0) {
+                item._changeType = 'changed';
+                item._changedFields = changedFields;
+            } else {
+                item._changeType = 'unchanged';
+                item._changedFields = [];
+            }
+        }
+
+        const newCount = newItems.filter(i => i._changeType === 'new').length;
+        const changedCount = newItems.filter(i => i._changeType === 'changed').length;
+        this.log('info', `Change detection: ${newCount} new, ${changedCount} changed, ${newItems.length - newCount - changedCount} unchanged`);
+    }
+
     processData(rawData) {
         this.log('info', 'Processing roadmap data...');
         const processedData = {
@@ -308,6 +374,7 @@ class RoadmapDataUpdater {
             this.log('info', 'Starting Microsoft 365 Roadmap data update...');
 
             const rawData = await this.fetchData();
+            this.detectChanges(rawData);
             const processedData = this.processData(rawData);
             await this.saveData(processedData);
             await this.generateReport();

@@ -83,6 +83,15 @@ function itemMatchesFilters(item, filters, timelineMatcher) {
     return true;
 }
 
+function filterCopilotItems(items) {
+    if (!Array.isArray(items)) return [];
+    return items.filter(item => {
+        const products = item.tagsContainer && Array.isArray(item.tagsContainer.products)
+            ? item.tagsContainer.products : [];
+        return products.some(p => p && typeof p.tagName === 'string' && p.tagName.includes('Copilot'));
+    });
+}
+
 function filterRoadmapItems(items, filters, timelineMatcher) {
     if (!Array.isArray(items)) return [];
     const safeFilters = (filters && typeof filters === 'object') ? filters : {};
@@ -231,8 +240,9 @@ class M365RoadmapDashboard {
             }
 
             const raw = await response.json();
-            const data = this.normalizeLoadedData(raw);
-            logDiagnostics('loadData: fetched', data.length, 'items');
+            let data = this.normalizeLoadedData(raw);
+            data = filterCopilotItems(data);
+            logDiagnostics('loadData: fetched', data.length, 'Copilot items');
 
             this.allData = data;
             this.setCachedData({ items: data, raw });
@@ -248,14 +258,15 @@ class M365RoadmapDashboard {
             const cachedList = cached && Array.isArray(cached.data) ? cached.data : (cached && cached.data && Array.isArray(cached.data.items) ? cached.data.items : null);
             const cachedItems = cachedList ? this.normalizeItemList(cachedList) : [];
 
-            if (cachedItems.length > 0) {
-                this.allData = cachedItems;
-                this.setCachedData({ items: cachedItems, raw: { items: cachedItems } });
+            const copilotCachedItems = filterCopilotItems(cachedItems);
+            if (copilotCachedItems.length > 0) {
+                this.allData = copilotCachedItems;
+                this.setCachedData({ items: copilotCachedItems, raw: { items: copilotCachedItems } });
                 this.setLoadState(LoadState.ERROR_RECOVERABLE);
                 this.processData();
                 this.applyStateToDOM();
                 this.showNotification('Using cached data - unable to fetch latest updates', 'warning');
-                logDiagnostics('loadData: recovered from cache', cachedItems.length);
+                logDiagnostics('loadData: recovered from cache', copilotCachedItems.length);
             } else {
                 this.setLoadState(LoadState.ERROR_FATAL);
                 this.applyStateToDOM();
@@ -490,14 +501,24 @@ class M365RoadmapDashboard {
         const releasePhase = rp === 'General' ? String(item.status || '') : rp;
         const date = this.safeFormatDate(item.publicDisclosureAvailabilityDate, { year: 'numeric', month: 'short' }) || 'TBD';
 
+        const changePill = item._changeType === 'new'
+            ? '<span class="change-pill change-new">NEW</span>'
+            : item._changeType === 'changed'
+                ? '<span class="change-pill change-updated">UPDATED</span>'
+                : '';
+        const changedFieldsHtml = item._changeType === 'changed' && item._changedFields?.length
+            ? `<div class="card-changed-fields">Changed: ${this.escapeHtml(item._changedFields.join(', '))}</div>`
+            : '';
+
         card.innerHTML = `
             <div class="card-header">
-                <h3 class="card-title">${this.escapeHtml(item.title)}</h3>
+                <h3 class="card-title">${changePill}${this.escapeHtml(item.title)}</h3>
                 <div class="card-date">${this.escapeHtml(date)}</div>
             </div>
             <div class="card-description">
                 ${this.escapeHtml(this.safeDescription(item.description))}
             </div>
+            ${changedFieldsHtml}
             <div class="card-tags">
                 <span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(releasePhase)}</span>
                 <span class="tag">${this.escapeHtml(products)}</span>
@@ -541,9 +562,15 @@ class M365RoadmapDashboard {
         const date = this.safeFormatDate(item.publicDisclosureAvailabilityDate, { year: 'numeric', month: 'long', day: 'numeric' }) || 'To Be Determined';
         const products = this.safeTagList(item.tagsContainer?.products);
 
+        const timelineChangePill = item._changeType === 'new'
+            ? '<span class="change-pill change-new">NEW</span>'
+            : item._changeType === 'changed'
+                ? '<span class="change-pill change-updated">UPDATED</span>'
+                : '';
+
         timelineItem.innerHTML = `
             <div class="timeline-date">${this.escapeHtml(date)}</div>
-            <div class="timeline-title">${this.escapeHtml(item.title)}</div>
+            <div class="timeline-title">${timelineChangePill}${this.escapeHtml(item.title)}</div>
             <div class="timeline-description">
                 <strong>Service:</strong> ${this.escapeHtml(products)}<br>
                 <strong>Status:</strong> ${this.escapeHtml(String(item.status || ''))}<br><br>
@@ -574,6 +601,12 @@ class M365RoadmapDashboard {
         const descSnippet = this.safeDescription(item.description).substring(0, 100);
         const descDisplay = descSnippet.length >= 100 ? `${descSnippet}...` : descSnippet;
 
+        const tableChangePill = item._changeType === 'new'
+            ? '<span class="change-pill change-new">NEW</span>'
+            : item._changeType === 'changed'
+                ? '<span class="change-pill change-updated">UPDATED</span>'
+                : '';
+
         row.innerHTML = `
             <td>
                 <strong>${this.escapeHtml(item.title)}</strong><br>
@@ -583,6 +616,7 @@ class M365RoadmapDashboard {
             <td><span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(String(item.status || ''))}</span></td>
             <td>${this.escapeHtml(platforms)}</td>
             <td>${this.escapeHtml(date)}</td>
+            <td>${tableChangePill}</td>
         `;
         return row;
     }
@@ -777,6 +811,8 @@ class M365RoadmapDashboard {
                 return 'in-development';
             case 'rolling out':
                 return 'rolling-out';
+            case 'launched':
+                return 'launched';
             default:
                 return '';
         }
@@ -830,6 +866,7 @@ if (typeof module !== 'undefined' && module.exports) {
         LoadState,
         getCacheMaxAgeMs,
         isCacheStale,
+        filterCopilotItems,
         filterRoadmapItems,
         itemMatchesFilters,
         M365RoadmapDashboard

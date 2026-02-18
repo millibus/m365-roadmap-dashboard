@@ -78,7 +78,7 @@ class SetupTester {
             // Check for essential elements
             const checks = [
                 { test: /<meta name="viewport"/, name: 'Responsive viewport meta tag' },
-                { test: /<title>.*Microsoft 365 Roadmap/, name: 'Appropriate page title' },
+                { test: /<title>.*Copilot Roadmap/, name: 'Appropriate page title' },
                 { test: /id="search-input"/, name: 'Search input element' },
                 { test: /id="cards-view"/, name: 'Cards view container' },
                 { test: /id="timeline-view"/, name: 'Timeline view container' },
