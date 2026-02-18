@@ -1,8 +1,100 @@
+/** Load state constants for deterministic UI (testable, never broken render). */
+const LoadState = Object.freeze({
+    IDLE: 'idle',
+    LOADING: 'loading',
+    SUCCESS: 'success',
+    EMPTY: 'empty',
+    ERROR_RECOVERABLE: 'error_recoverable',
+    ERROR_FATAL: 'error_fatal'
+});
+
+/** Default cache max age: 4 hours. Override via M365_ROADMAP_CACHE_MAX_AGE_MS (env not available in browser; use window.__M365_ROADMAP_CACHE_MAX_AGE_MS for tests). */
+function getCacheMaxAgeMs() {
+    if (typeof window !== 'undefined' && window.__M365_ROADMAP_CACHE_MAX_AGE_MS != null) {
+        return Math.max(0, Number(window.__M365_ROADMAP_CACHE_MAX_AGE_MS));
+    }
+    return 4 * 60 * 60 * 1000;
+}
+
+/** True if cache entry is past max age (stale). Testable via getCacheMaxAgeMs. */
+function isCacheStale(timestamp) {
+    if (timestamp == null || typeof timestamp !== 'number') return true;
+    return (Date.now() - timestamp) >= getCacheMaxAgeMs();
+}
+
+/** True when diagnostics mode is on (URL ?diagnostics=1 or localStorage m365-roadmap-diagnostics). Non-visual: logs load/cache/render info to console. */
+function isDiagnosticsMode() {
+    if (typeof window === 'undefined') return false;
+    try {
+        if (typeof URLSearchParams !== 'undefined' && window.location.search) {
+            const p = new URLSearchParams(window.location.search);
+            if (p.get('diagnostics') === '1' || p.get('diagnostics') === 'true') return true;
+        }
+        return localStorage.getItem('m365-roadmap-diagnostics') === 'true';
+    } catch (_) {
+        return false;
+    }
+}
+
+function logDiagnostics(...args) {
+    if (isDiagnosticsMode()) {
+        console.log('[M365 Roadmap]', ...args);
+    }
+}
+
+function safeString(value) {
+    return (value != null && typeof value === 'string') ? value : '';
+}
+
+function itemMatchesFilters(item, filters, timelineMatcher) {
+    if (!item || typeof item !== 'object') return false;
+
+    const title = safeString(item.title);
+
+    if (filters.search) {
+        const searchText = safeString(filters.search).toLowerCase();
+        const desc = safeString(item.description);
+        const titleMatch = title.toLowerCase().includes(searchText);
+        const descMatch = desc.toLowerCase().includes(searchText);
+        if (!titleMatch && !descMatch) return false;
+    }
+
+    if (filters.service) {
+        const products = item.tagsContainer && Array.isArray(item.tagsContainer.products) ? item.tagsContainer.products : [];
+        const hasService = products.some(p => p && p.tagName === filters.service);
+        if (!hasService) return false;
+    }
+
+    if (filters.status) {
+        if (safeString(item.status) !== filters.status) return false;
+    }
+
+    if (filters.platform) {
+        const platforms = item.tagsContainer && Array.isArray(item.tagsContainer.platforms) ? item.tagsContainer.platforms : [];
+        const hasPlatform = platforms.some(p => p && p.tagName === filters.platform);
+        if (!hasPlatform) return false;
+    }
+
+    if (filters.timeline) {
+        if (typeof timelineMatcher !== 'function') return false;
+        if (!timelineMatcher(item, filters.timeline)) return false;
+    }
+
+    return true;
+}
+
+function filterRoadmapItems(items, filters, timelineMatcher) {
+    if (!Array.isArray(items)) return [];
+    const safeFilters = (filters && typeof filters === 'object') ? filters : {};
+    return items.filter((item) => itemMatchesFilters(item, safeFilters, timelineMatcher));
+}
+
 class M365RoadmapDashboard {
     constructor() {
         this.allData = [];
         this.filteredData = [];
         this.currentView = 'cards';
+        this.loadState = LoadState.IDLE;
         this.filters = {
             search: '',
             service: '',
@@ -10,10 +102,9 @@ class M365RoadmapDashboard {
             platform: '',
             timeline: ''
         };
-        
         this.init();
     }
-    
+
     async init() {
         this.bindEvents();
         await this.loadData();
@@ -94,78 +185,163 @@ class M365RoadmapDashboard {
         };
     }
     
+    /**
+     * Normalizes API/file payload to an array of roadmap items.
+     * Accepts: { items: [] } or raw array. Returns empty array if invalid.
+     */
+    normalizeLoadedData(raw) {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return this.normalizeItemList(raw);
+        if (raw && typeof raw === 'object' && Array.isArray(raw.items)) {
+            return this.normalizeItemList(raw.items);
+        }
+        logDiagnostics('normalizeLoadedData: unexpected shape', typeof raw);
+        return [];
+    }
+
+    /** Filters and returns only items that have required fields for rendering (guards against malformed data). */
+    normalizeItemList(items) {
+        if (!Array.isArray(items)) return [];
+        const out = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item && typeof item === 'object' && item.id != null && typeof item.title === 'string') {
+                out.push(item);
+            } else if (isDiagnosticsMode() && items[i] != null) {
+                logDiagnostics('normalizeItemList: skipping invalid item at index', i, items[i]);
+            }
+        }
+        return out;
+    }
+
     async loadData() {
-        this.showLoading();
-        
+        this.setLoadState(LoadState.LOADING);
+        logDiagnostics('loadData: start');
+
         try {
-            // Try to load from local data files first (GitHub Pages deployment)
             let response = await fetch('data/roadmap-data.json');
-            
             if (!response.ok) {
-                // Fallback to compact data if main file fails
                 response = await fetch('data/roadmap-data-compact.json');
             }
-            
             if (!response.ok) {
-                // Final fallback to sample data for development
                 response = await fetch('data/sample-data.json');
             }
-            
             if (!response.ok) {
                 throw new Error(`Failed to load data files: ${response.status}`);
             }
-            
-            const data = await response.json();
+
+            const raw = await response.json();
+            const data = this.normalizeLoadedData(raw);
+            logDiagnostics('loadData: fetched', data.length, 'items');
+
             this.allData = data;
-            
-            // Cache the data with current timestamp
-            this.setCachedData(data);
-            
+            this.setCachedData({ items: data, raw });
+            this.setLoadState(data.length === 0 ? LoadState.EMPTY : LoadState.SUCCESS);
             this.processData();
-            this.hideLoading();
-            
+            this.applyStateToDOM();
+            return;
         } catch (error) {
             console.error('Error loading data:', error);
-            
-            // Try to use cached data as final fallback
-            const cachedData = this.getCachedData();
-            if (cachedData) {
-                this.allData = cachedData.data;
+            logDiagnostics('loadData: fetch failed', error.message);
+
+            const cached = this.getCachedData();
+            const cachedList = cached && Array.isArray(cached.data) ? cached.data : (cached && cached.data && Array.isArray(cached.data.items) ? cached.data.items : null);
+            const cachedItems = cachedList ? this.normalizeItemList(cachedList) : [];
+
+            if (cachedItems.length > 0) {
+                this.allData = cachedItems;
+                this.setCachedData({ items: cachedItems, raw: { items: cachedItems } });
+                this.setLoadState(LoadState.ERROR_RECOVERABLE);
                 this.processData();
-                this.hideLoading();
+                this.applyStateToDOM();
                 this.showNotification('Using cached data - unable to fetch latest updates', 'warning');
+                logDiagnostics('loadData: recovered from cache', cachedItems.length);
             } else {
-                this.showError();
+                this.setLoadState(LoadState.ERROR_FATAL);
+                this.applyStateToDOM();
+                logDiagnostics('loadData: fatal, no cache');
             }
         }
     }
-    
+
+    setLoadState(state) {
+        this.loadState = state;
+        logDiagnostics('setLoadState', state);
+    }
+
+    /** Single place that applies current load state to DOM (deterministic: never broken render). */
+    applyStateToDOM() {
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        const resultsInfo = document.getElementById('results-info');
+        const viewIds = ['cards-view', 'timeline-view', 'table-view'];
+        const noResultsEl = document.getElementById('no-results');
+
+        if (!loadingEl || !errorEl) return;
+
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'none';
+        resultsInfo.style.display = 'none';
+        viewIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        if (noResultsEl) noResultsEl.style.display = 'none';
+
+        switch (this.loadState) {
+            case LoadState.LOADING:
+                loadingEl.style.display = 'block';
+                break;
+            case LoadState.ERROR_FATAL:
+                errorEl.style.display = 'block';
+                break;
+            case LoadState.ERROR_RECOVERABLE:
+            case LoadState.SUCCESS:
+            case LoadState.EMPTY:
+                resultsInfo.style.display = 'flex';
+                const viewEl = document.getElementById(`${this.currentView}-view`);
+                if (viewEl) viewEl.style.display = 'block';
+                if (noResultsEl) {
+                    noResultsEl.style.display = this.filteredData.length === 0 ? 'block' : 'none';
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     getCachedData() {
         try {
             const cached = localStorage.getItem('m365-roadmap-data');
-            return cached ? JSON.parse(cached) : null;
+            if (!cached) return null;
+            const parsed = JSON.parse(cached);
+            return parsed && (parsed.data || parsed.items) ? parsed : null;
         } catch (error) {
             console.error('Error reading cache:', error);
             return null;
         }
     }
-    
-    setCachedData(data) {
+
+    setCachedData(payload) {
         try {
-            const cacheData = {
-                data: data,
-                timestamp: Date.now()
-            };
+            const data = Array.isArray(payload)
+                ? payload
+                : (payload && Array.isArray(payload.items))
+                    ? payload.items
+                    : (payload && Array.isArray(payload.data))
+                        ? payload.data
+                        : null;
+            const cacheData = { data: data || [], timestamp: Date.now() };
             localStorage.setItem('m365-roadmap-data', JSON.stringify(cacheData));
         } catch (error) {
             console.error('Error setting cache:', error);
         }
     }
-    
+
+    /** True if cache entry is still within max age (fresh). Testable via getCacheMaxAgeMs. */
     isCacheValid(timestamp) {
-        const cacheAge = Date.now() - timestamp;
-        const maxAge = 4 * 60 * 60 * 1000; // 4 hours
-        return cacheAge < maxAge;
+        if (timestamp == null || typeof timestamp !== 'number') return false;
+        return !isCacheStale(timestamp);
     }
     
     processData() {
@@ -177,113 +353,81 @@ class M365RoadmapDashboard {
     }
     
     populateFilterOptions() {
-        // Extract unique services
         const services = new Set();
         const platforms = new Set();
-        
+
         this.allData.forEach(item => {
-            // Extract products from tags
-            if (item.tagsContainer && item.tagsContainer.products) {
-                item.tagsContainer.products.forEach(product => {
-                    services.add(product.tagName);
-                });
-            }
-            
-            // Extract platforms
-            if (item.tagsContainer && item.tagsContainer.platforms) {
-                item.tagsContainer.platforms.forEach(platform => {
-                    platforms.add(platform.tagName);
-                });
-            }
+            if (!item || typeof item !== 'object') return;
+            const products = item.tagsContainer && Array.isArray(item.tagsContainer.products) ? item.tagsContainer.products : [];
+            products.forEach(p => {
+                if (p && p.tagName != null) services.add(String(p.tagName));
+            });
+            const plats = item.tagsContainer && Array.isArray(item.tagsContainer.platforms) ? item.tagsContainer.platforms : [];
+            plats.forEach(p => {
+                if (p && p.tagName != null) platforms.add(String(p.tagName));
+            });
         });
-        
-        // Populate service filter
+
         const serviceFilter = document.getElementById('service-filter');
-        serviceFilter.innerHTML = '<option value="">All Services</option>';
-        Array.from(services).sort().forEach(service => {
-            const option = document.createElement('option');
-            option.value = service;
-            option.textContent = service;
-            serviceFilter.appendChild(option);
-        });
-        
-        // Populate platform filter
         const platformFilter = document.getElementById('platform-filter');
-        platformFilter.innerHTML = '<option value="">All Platforms</option>';
-        Array.from(platforms).sort().forEach(platform => {
-            const option = document.createElement('option');
-            option.value = platform;
-            option.textContent = platform;
-            platformFilter.appendChild(option);
-        });
+        if (serviceFilter) {
+            serviceFilter.innerHTML = '<option value="">All Services</option>';
+            Array.from(services).sort().forEach(service => {
+                const option = document.createElement('option');
+                option.value = service;
+                option.textContent = service;
+                serviceFilter.appendChild(option);
+            });
+        }
+        if (platformFilter) {
+            platformFilter.innerHTML = '<option value="">All Platforms</option>';
+            Array.from(platforms).sort().forEach(platform => {
+                const option = document.createElement('option');
+                option.value = platform;
+                option.textContent = platform;
+                platformFilter.appendChild(option);
+            });
+        }
     }
     
     applyFilters() {
-        this.filteredData = this.allData.filter(item => {
-            // Search filter
-            if (this.filters.search) {
-                const searchText = this.filters.search;
-                const titleMatch = item.title.toLowerCase().includes(searchText);
-                const descMatch = item.description.toLowerCase().includes(searchText);
-                if (!titleMatch && !descMatch) return false;
-            }
-            
-            // Service filter
-            if (this.filters.service) {
-                const hasService = item.tagsContainer?.products?.some(
-                    product => product.tagName === this.filters.service
-                );
-                if (!hasService) return false;
-            }
-            
-            // Status filter
-            if (this.filters.status) {
-                if (item.status !== this.filters.status) return false;
-            }
-            
-            // Platform filter
-            if (this.filters.platform) {
-                const hasPlatform = item.tagsContainer?.platforms?.some(
-                    platform => platform.tagName === this.filters.platform
-                );
-                if (!hasPlatform) return false;
-            }
-            
-            // Timeline filter
-            if (this.filters.timeline) {
-                if (!this.matchesTimeline(item, this.filters.timeline)) return false;
-            }
-            
-            return true;
-        });
-        
+        this.filteredData = filterRoadmapItems(
+            this.allData,
+            this.filters,
+            (item, timeline) => this.matchesTimeline(item, timeline)
+        );
+
         this.renderCurrentView();
         this.updateResultsInfo();
     }
-    
+
     matchesTimeline(item, timeline) {
-        if (!item.publicDisclosureAvailabilityDate) return false;
-        
-        const itemDate = new Date(item.publicDisclosureAvailabilityDate);
+        if (!item || !item.publicDisclosureAvailabilityDate) return false;
+        const raw = item.publicDisclosureAvailabilityDate;
+        const itemDate = new Date(raw);
+        if (Number.isNaN(itemDate.getTime())) return false;
         const now = new Date();
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
-        
+
         switch (timeline) {
             case 'current-month':
                 return itemDate.getMonth() === currentMonth && itemDate.getFullYear() === currentYear;
-            case 'next-month':
+            case 'next-month': {
                 const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1);
                 return itemDate.getMonth() === nextMonth.getMonth() && itemDate.getFullYear() === nextMonth.getFullYear();
-            case 'this-quarter':
+            }
+            case 'this-quarter': {
                 const currentQuarter = Math.floor(currentMonth / 3);
                 const itemQuarter = Math.floor(itemDate.getMonth() / 3);
                 return itemQuarter === currentQuarter && itemDate.getFullYear() === currentYear;
-            case 'next-quarter':
+            }
+            case 'next-quarter': {
                 const nextQuarter = (Math.floor(currentMonth / 3) + 1) % 4;
                 const nextQuarterYear = nextQuarter === 0 ? currentYear + 1 : currentYear;
                 const itemQ = Math.floor(itemDate.getMonth() / 3);
                 return itemQ === nextQuarter && itemDate.getFullYear() === nextQuarterYear;
+            }
             case 'this-year':
                 return itemDate.getFullYear() === currentYear;
             case 'next-year':
@@ -295,17 +439,16 @@ class M365RoadmapDashboard {
     
     switchView(view) {
         document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelector(`[data-view="${view}"]`).classList.add('active');
-        
-        // Hide all views
-        document.getElementById('cards-view').style.display = 'none';
-        document.getElementById('timeline-view').style.display = 'none';
-        document.getElementById('table-view').style.display = 'none';
-        
+        const activeBtn = document.querySelector(`[data-view="${view}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        ['cards-view', 'timeline-view', 'table-view'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
         this.currentView = view;
         this.renderCurrentView();
     }
-    
+
     renderCurrentView() {
         switch (this.currentView) {
             case 'cards':
@@ -318,142 +461,137 @@ class M365RoadmapDashboard {
                 this.renderTableView();
                 break;
         }
-        
-        // Show appropriate view
-        document.getElementById(`${this.currentView}-view`).style.display = 'block';
-        
-        // Show/hide no results
-        document.getElementById('no-results').style.display = 
-            this.filteredData.length === 0 ? 'block' : 'none';
+        const viewEl = document.getElementById(`${this.currentView}-view`);
+        const noResultsEl = document.getElementById('no-results');
+        if (viewEl) viewEl.style.display = 'block';
+        if (noResultsEl) noResultsEl.style.display = this.filteredData.length === 0 ? 'block' : 'none';
     }
     
     renderCardsView() {
         const container = document.getElementById('cards-view');
+        if (!container) return;
         container.innerHTML = '';
-        
+
         this.filteredData.forEach(item => {
             const card = this.createCard(item);
-            container.appendChild(card);
+            if (card) container.appendChild(card);
         });
     }
     
     createCard(item) {
+        if (!item || typeof item.title !== 'string') return null;
         const card = document.createElement('div');
         card.className = 'roadmap-card';
-        
-        const products = item.tagsContainer?.products?.map(p => p.tagName).join(', ') || 'General';
-        const platforms = item.tagsContainer?.platforms?.map(p => p.tagName).join(', ') || '';
-        const releasePhase = item.tagsContainer?.releasePhase?.map(p => p.tagName).join(', ') || item.status;
-        
-        const date = item.publicDisclosureAvailabilityDate ? 
-            new Date(item.publicDisclosureAvailabilityDate).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short'
-            }) : 'TBD';
-        
+
+        const products = this.safeTagList(item.tagsContainer?.products);
+        const platforms = this.safeTagList(item.tagsContainer?.platforms);
+        const rp = this.safeTagList(item.tagsContainer?.releasePhase);
+        const releasePhase = rp === 'General' ? String(item.status || '') : rp;
+        const date = this.safeFormatDate(item.publicDisclosureAvailabilityDate, { year: 'numeric', month: 'short' }) || 'TBD';
+
         card.innerHTML = `
             <div class="card-header">
                 <h3 class="card-title">${this.escapeHtml(item.title)}</h3>
-                <div class="card-id">#${item.id}</div>
+                <div class="card-id">#${this.escapeHtml(String(item.id != null ? item.id : ''))}</div>
             </div>
             <div class="card-description">
-                ${this.escapeHtml(item.description)}
+                ${this.escapeHtml(this.safeDescription(item.description))}
             </div>
             <div class="card-tags">
-                <span class="tag">${products}</span>
-                ${platforms ? `<span class="tag">${platforms}</span>` : ''}
-                <span class="tag status ${this.getStatusClass(item.status)}">${releasePhase}</span>
+                <span class="tag">${this.escapeHtml(products)}</span>
+                ${platforms ? `<span class="tag">${this.escapeHtml(platforms)}</span>` : ''}
+                <span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(releasePhase)}</span>
             </div>
             <div class="card-footer">
                 <div class="card-date">
                     <i class="fas fa-calendar"></i>
-                    ${date}
+                    ${this.escapeHtml(date)}
                 </div>
-                <button class="expand-btn" onclick="this.classList.toggle('expanded'); this.textContent = this.classList.contains('expanded') ? 'Show Less' : 'Show More'; this.parentNode.parentNode.querySelector('.card-description').style.webkitLineClamp = this.classList.contains('expanded') ? 'unset' : '3';">
+                <button class="expand-btn" data-expand="card">
                     Show More
                 </button>
             </div>
         `;
-        
+        const expandBtn = card.querySelector('[data-expand="card"]');
+        if (expandBtn) {
+            expandBtn.addEventListener('click', function () {
+                this.classList.toggle('expanded');
+                this.textContent = this.classList.contains('expanded') ? 'Show Less' : 'Show More';
+                const desc = this.closest('.roadmap-card')?.querySelector('.card-description');
+                if (desc) desc.style.webkitLineClamp = this.classList.contains('expanded') ? 'unset' : '3';
+            });
+        }
         return card;
     }
     
     renderTimelineView() {
         const container = document.querySelector('#timeline-view .timeline');
+        if (!container) return;
         container.innerHTML = '';
-        
-        // Sort by date
+
         const sortedData = [...this.filteredData].sort((a, b) => {
-            const dateA = new Date(a.publicDisclosureAvailabilityDate || '9999-12-31');
-            const dateB = new Date(b.publicDisclosureAvailabilityDate || '9999-12-31');
-            return dateA - dateB;
+            const dA = this.safeParseDate(a?.publicDisclosureAvailabilityDate);
+            const dB = this.safeParseDate(b?.publicDisclosureAvailabilityDate);
+            return (dA.getTime ? dA.getTime() : 0) - (dB.getTime ? dB.getTime() : 0);
         });
-        
+
         sortedData.forEach(item => {
-            const timelineItem = this.createTimelineItem(item);
-            container.appendChild(timelineItem);
+            const node = this.createTimelineItem(item);
+            if (node) container.appendChild(node);
         });
     }
-    
+
     createTimelineItem(item) {
+        if (!item || typeof item.title !== 'string') return null;
         const timelineItem = document.createElement('div');
         timelineItem.className = 'timeline-item';
-        
-        const date = item.publicDisclosureAvailabilityDate ? 
-            new Date(item.publicDisclosureAvailabilityDate).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            }) : 'To Be Determined';
-        
-        const products = item.tagsContainer?.products?.map(p => p.tagName).join(', ') || 'General';
-        
+
+        const date = this.safeFormatDate(item.publicDisclosureAvailabilityDate, { year: 'numeric', month: 'long', day: 'numeric' }) || 'To Be Determined';
+        const products = this.safeTagList(item.tagsContainer?.products);
+
         timelineItem.innerHTML = `
-            <div class="timeline-date">${date}</div>
+            <div class="timeline-date">${this.escapeHtml(date)}</div>
             <div class="timeline-title">${this.escapeHtml(item.title)}</div>
             <div class="timeline-description">
-                <strong>Service:</strong> ${products}<br>
-                <strong>Status:</strong> ${item.status}<br><br>
-                ${this.escapeHtml(item.description)}
+                <strong>Service:</strong> ${this.escapeHtml(products)}<br>
+                <strong>Status:</strong> ${this.escapeHtml(String(item.status || ''))}<br><br>
+                ${this.escapeHtml(this.safeDescription(item.description))}
             </div>
         `;
-        
         return timelineItem;
     }
     
     renderTableView() {
         const tbody = document.querySelector('#table-view tbody');
+        if (!tbody) return;
         tbody.innerHTML = '';
-        
+
         this.filteredData.forEach(item => {
             const row = this.createTableRow(item);
-            tbody.appendChild(row);
+            if (row) tbody.appendChild(row);
         });
     }
-    
+
     createTableRow(item) {
+        if (!item || typeof item.title !== 'string') return null;
         const row = document.createElement('tr');
-        
-        const products = item.tagsContainer?.products?.map(p => p.tagName).join(', ') || 'General';
-        const platforms = item.tagsContainer?.platforms?.map(p => p.tagName).join(', ') || '';
-        
-        const date = item.publicDisclosureAvailabilityDate ? 
-            new Date(item.publicDisclosureAvailabilityDate).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short'
-            }) : 'TBD';
-        
+
+        const products = this.safeTagList(item.tagsContainer?.products);
+        const platforms = this.safeTagList(item.tagsContainer?.platforms);
+        const date = this.safeFormatDate(item.publicDisclosureAvailabilityDate, { year: 'numeric', month: 'short' }) || 'TBD';
+        const descSnippet = this.safeDescription(item.description).substring(0, 100);
+        const descDisplay = descSnippet.length >= 100 ? `${descSnippet}...` : descSnippet;
+
         row.innerHTML = `
             <td>
                 <strong>${this.escapeHtml(item.title)}</strong><br>
-                <small style="color: #605e5c;">${this.escapeHtml(item.description.substring(0, 100))}...</small>
+                <small style="color: #605e5c;">${this.escapeHtml(descDisplay)}</small>
             </td>
-            <td>${products}</td>
-            <td><span class="tag status ${this.getStatusClass(item.status)}">${item.status}</span></td>
-            <td>${platforms}</td>
-            <td>${date}</td>
+            <td>${this.escapeHtml(products)}</td>
+            <td><span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(String(item.status || ''))}</span></td>
+            <td>${this.escapeHtml(platforms)}</td>
+            <td>${this.escapeHtml(date)}</td>
         `;
-        
         return row;
     }
     
@@ -474,34 +612,27 @@ class M365RoadmapDashboard {
     updateRefreshStatus() {
         const cachedData = this.getCachedData();
         const lastUpdateElement = document.getElementById('last-update');
-        
-        if (cachedData && cachedData.timestamp) {
+        if (!lastUpdateElement) return;
+
+        if (cachedData && typeof cachedData.timestamp === 'number') {
             const lastUpdate = new Date(cachedData.timestamp);
             const now = new Date();
             const diffMinutes = Math.floor((now - lastUpdate) / (1000 * 60));
-            
             let timeAgo;
-            if (diffMinutes < 1) {
-                timeAgo = 'just now';
-            } else if (diffMinutes < 60) {
-                timeAgo = `${diffMinutes}m ago`;
-            } else if (diffMinutes < 1440) { // 24 hours
-                const hours = Math.floor(diffMinutes / 60);
-                timeAgo = `${hours}h ago`;
-            } else {
-                const days = Math.floor(diffMinutes / 1440);
-                timeAgo = `${days}d ago`;
-            }
-            
+            if (diffMinutes < 1) timeAgo = 'just now';
+            else if (diffMinutes < 60) timeAgo = `${diffMinutes}m ago`;
+            else if (diffMinutes < 1440) timeAgo = `${Math.floor(diffMinutes / 60)}h ago`;
+            else timeAgo = `${Math.floor(diffMinutes / 1440)}d ago`;
             lastUpdateElement.textContent = `Last updated: ${timeAgo}`;
+            if (isDiagnosticsMode()) {
+                logDiagnostics('cache age minutes', diffMinutes, 'stale', isCacheStale(cachedData.timestamp));
+            }
         } else {
             lastUpdateElement.textContent = 'Last updated: Unknown';
         }
-        
-        // Calculate next update time (5:00 AM PT daily)
-        const nextUpdate = this.getNextUpdateTime();
+
         const nextUpdateElement = document.getElementById('next-update');
-        nextUpdateElement.textContent = `Next update: ${nextUpdate}`;
+        if (nextUpdateElement) nextUpdateElement.textContent = `Next update: ${this.getNextUpdateTime()}`;
     }
     
     getNextUpdateTime() {
@@ -576,31 +707,30 @@ class M365RoadmapDashboard {
     }
     
     showLoading() {
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('error').style.display = 'none';
-        document.getElementById('results-info').style.display = 'none';
-        document.getElementById(`${this.currentView}-view`).style.display = 'none';
+        this.setLoadState(LoadState.LOADING);
+        this.applyStateToDOM();
     }
-    
+
     hideLoading() {
-        document.getElementById('loading').style.display = 'none';
+        if (this.loadState === LoadState.LOADING) {
+            this.setLoadState(this.allData.length === 0 ? LoadState.EMPTY : LoadState.SUCCESS);
+            this.applyStateToDOM();
+        }
     }
-    
+
     showError() {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('error').style.display = 'block';
-        document.getElementById('results-info').style.display = 'none';
-        document.getElementById(`${this.currentView}-view`).style.display = 'none';
+        this.setLoadState(LoadState.ERROR_FATAL);
+        this.applyStateToDOM();
     }
     
     showNotification(message, type) {
-        // Create notification element
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
+        const safeMessage = this.escapeHtml(message != null ? String(message) : '');
         notification.innerHTML = `
             <div class="notification-content">
                 <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
-                <span>${message}</span>
+                <span>${safeMessage}</span>
             </div>
         `;
         
@@ -650,13 +780,55 @@ class M365RoadmapDashboard {
     }
     
     escapeHtml(text) {
+        if (text == null) return '';
+        const s = String(text);
         const div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = s;
         return div.innerHTML;
+    }
+
+    /** Safe string for description (null/undefined -> ''). */
+    safeDescription(desc) {
+        return (desc != null && typeof desc === 'string') ? desc : '';
+    }
+
+    /** Safe tag list from tagsContainer array; returns 'General' if empty. */
+    safeTagList(arr) {
+        if (!Array.isArray(arr)) return 'General';
+        const names = arr.map(p => (p && p.tagName != null) ? String(p.tagName) : '').filter(Boolean);
+        return names.length ? names.join(', ') : 'General';
+    }
+
+    /** Format date for display; invalid/missing returns null. */
+    safeFormatDate(value, options) {
+        if (value == null || value === '') return null;
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toLocaleDateString('en-US', options || { year: 'numeric', month: 'short' });
+    }
+
+    /** Parse date for sorting; invalid returns sentinel. */
+    safeParseDate(value) {
+        if (value == null || value === '') return { getTime: () => 0 };
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? { getTime: () => 0 } : d;
     }
 }
 
-// Initialize the dashboard when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new M365RoadmapDashboard();
-});
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    // Initialize the dashboard when the DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        new M365RoadmapDashboard();
+    });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        LoadState,
+        getCacheMaxAgeMs,
+        isCacheStale,
+        filterRoadmapItems,
+        itemMatchesFilters,
+        M365RoadmapDashboard
+    };
+}

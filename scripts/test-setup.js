@@ -157,33 +157,85 @@ class SetupTester {
         }
     }
     
+    /** Shared data-shape check: { metadata, items } with each item having id, title, description, status */
+    validateRoadmapDataShape(data, sourceLabel) {
+        const requiredItemKeys = ['id', 'title', 'description', 'status'];
+        const requiredMetaKeys = ['lastUpdated', 'totalItems', 'apiSource', 'version'];
+        if (!data || typeof data !== 'object') {
+            this.log('error', `${sourceLabel}: root must be an object`);
+            return false;
+        }
+        if (!data.metadata || typeof data.metadata !== 'object') {
+            this.log('error', `${sourceLabel}: missing or invalid metadata`);
+            return false;
+        }
+        for (const k of requiredMetaKeys) {
+            if (!(k in data.metadata)) {
+                this.log('error', `${sourceLabel}: metadata missing "${k}"`);
+                return false;
+            }
+        }
+        if (!Array.isArray(data.items)) {
+            this.log('error', `${sourceLabel}: items must be an array`);
+            return false;
+        }
+        if (data.metadata.totalItems !== data.items.length) {
+            this.log('error', `${sourceLabel}: metadata.totalItems (${data.metadata.totalItems}) != items.length (${data.items.length})`);
+            return false;
+        }
+        for (let i = 0; i < data.items.length; i++) {
+            const item = data.items[i];
+            if (!item || typeof item !== 'object') {
+                this.log('error', `${sourceLabel}: items[${i}] must be an object`);
+                return false;
+            }
+            const missing = requiredItemKeys.filter(field => !(field in item));
+            if (missing.length > 0) {
+                this.log('error', `${sourceLabel}: items[${i}] missing: ${missing.join(', ')}`);
+                return false;
+            }
+        }
+        return true;
+    }
+
     validateSampleData() {
         const sampleDataPath = path.join(this.projectRoot, 'data/sample-data.json');
+        if (!fs.existsSync(sampleDataPath)) return;
         try {
             const content = fs.readFileSync(sampleDataPath, 'utf8');
             const data = JSON.parse(content);
-            
-            if (data.metadata && data.items && Array.isArray(data.items)) {
-                this.log('success', `Sample data is valid JSON with ${data.items.length} items`);
-                
-                // Validate data structure
-                if (data.items.length > 0) {
-                    const firstItem = data.items[0];
-                    const requiredFields = ['id', 'title', 'description', 'status'];
-                    
-                    const missingFields = requiredFields.filter(field => !firstItem[field]);
-                    if (missingFields.length === 0) {
-                        this.log('success', 'Sample data has correct structure');
-                    } else {
-                        this.log('error', `Sample data missing fields: ${missingFields.join(', ')}`);
-                    }
-                }
-            } else {
-                this.log('error', 'Sample data does not have expected structure');
+            if (this.validateRoadmapDataShape(data, 'sample-data.json')) {
+                this.log('success', `Sample data is valid with ${data.items.length} items`);
             }
-            
         } catch (error) {
             this.log('error', `Failed to validate sample data: ${error.message}`);
+        }
+    }
+
+    /** Data-shape checks for current dataset (roadmap-data.json, roadmap-data-compact.json) */
+    validateCurrentDataShape() {
+        const dataDir = path.join(this.projectRoot, 'data');
+        const files = [
+            { file: 'roadmap-data.json', label: 'roadmap-data.json' },
+            { file: 'roadmap-data-compact.json', label: 'roadmap-data-compact.json' }
+        ];
+        let anyFound = false;
+        for (const { file, label } of files) {
+            const fullPath = path.join(dataDir, file);
+            if (!fs.existsSync(fullPath)) continue;
+            anyFound = true;
+            try {
+                const content = fs.readFileSync(fullPath, 'utf8');
+                const data = JSON.parse(content);
+                if (this.validateRoadmapDataShape(data, label)) {
+                    this.log('success', `${label} shape valid (${data.items.length} items)`);
+                }
+            } catch (error) {
+                this.log('error', `${label}: ${error.message}`);
+            }
+        }
+        if (!anyFound) {
+            this.log('warn', 'No current roadmap data files found; run npm run update-data to generate');
         }
     }
     
@@ -260,6 +312,7 @@ class SetupTester {
         this.checkFileExists('js/app.js');
         this.checkFileExists('scripts/update-data.js');
         this.checkFileExists('scripts/update.sh');
+        this.checkFileExists('scripts/health-check.js');
         this.checkFileExists('README.md');
         this.checkFileExists('package.json');
         
@@ -278,6 +331,7 @@ class SetupTester {
         this.validateCssStructure();
         this.validateJavaScriptStructure();
         this.validateSampleData();
+        this.validateCurrentDataShape();
         
         // Check permissions
         this.checkScriptPermissions();

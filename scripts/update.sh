@@ -18,7 +18,9 @@
 #   GITHUB_REPO       GitHub repository (owner/repo)
 #   GH_PAGES_BRANCH   GitHub Pages branch (default: gh-pages)
 
-set -e
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,6 +59,14 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+require_command() {
+    local cmd="$1"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log_error "Required command not found: $cmd"
+        exit 1
+    fi
 }
 
 # Help function
@@ -109,13 +119,10 @@ done
 
 # Check if Node.js is available
 check_nodejs() {
-    if ! command -v node &> /dev/null; then
-        log_error "Node.js is not installed. Please install Node.js to run this script."
-        exit 1
-    fi
+    require_command node
     
     local node_version=$(node --version | cut -d'v' -f2)
-    local major_version=$(echo $node_version | cut -d'.' -f1)
+    local major_version=$(echo "$node_version" | cut -d'.' -f1)
     
     if [ "$major_version" -lt 14 ]; then
         log_error "Node.js version 14 or higher is required. Current version: $node_version"
@@ -123,6 +130,13 @@ check_nodejs() {
     fi
     
     log_info "Using Node.js version: $node_version"
+}
+
+check_dependencies() {
+    require_command git
+    require_command jq
+    require_command tee
+    require_command base64
 }
 
 # Create necessary directories
@@ -140,7 +154,6 @@ update_data() {
     log_info "Updating Microsoft 365 roadmap data..."
     
     local log_file="$PROJECT_DIR/logs/update-$(date '+%Y%m%d-%H%M%S').log"
-    local success=true
     
     # Set environment variables for the Node.js script
     export OUTPUT_DIR="$DATA_DIR"
@@ -172,25 +185,27 @@ deploy_to_github() {
     log_info "Deploying to GitHub Pages..."
     
     # Check required environment variables
-    if [ -z "$GITHUB_TOKEN" ]; then
+    if [ -z "${GITHUB_TOKEN:-}" ]; then
         log_error "GITHUB_TOKEN environment variable is required for deployment"
         exit 1
     fi
     
-    if [ -z "$GITHUB_REPO" ]; then
+    if [ -z "${GITHUB_REPO:-}" ]; then
         log_error "GITHUB_REPO environment variable is required for deployment"
         exit 1
     fi
     
-    # Check if git is available
-    if ! command -v git &> /dev/null; then
-        log_error "Git is not installed. Please install Git for deployment."
+    if [[ ! "$GITHUB_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+        log_error "GITHUB_REPO must be in owner/repo format"
         exit 1
     fi
     
     # Create a temporary directory for deployment
-    local temp_dir=$(mktemp -d)
-    local repo_url="https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    local repo_url="https://github.com/${GITHUB_REPO}.git"
+    local auth_header
+    auth_header="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
     
     # Cleanup function
     cleanup_temp() {
@@ -202,16 +217,14 @@ deploy_to_github() {
     
     # Clone the repository
     log_info "Cloning repository..."
-    if git clone --quiet --depth 1 --branch "$GH_PAGES_BRANCH" "$repo_url" "$temp_dir" 2>/dev/null || \
-       git clone --quiet --depth 1 "$repo_url" "$temp_dir"; then
-        
-        cd "$temp_dir"
+    if git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" clone --quiet --depth 1 --branch "$GH_PAGES_BRANCH" "$repo_url" "$temp_dir" 2>/dev/null || \
+       git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" clone --quiet --depth 1 "$repo_url" "$temp_dir"; then
         
         # Create or switch to GitHub Pages branch
-        if ! git checkout "$GH_PAGES_BRANCH" 2>/dev/null; then
+        if ! git -C "$temp_dir" checkout "$GH_PAGES_BRANCH" 2>/dev/null; then
             log_info "Creating new $GH_PAGES_BRANCH branch"
-            git checkout --orphan "$GH_PAGES_BRANCH"
-            git rm -rf . 2>/dev/null || true
+            git -C "$temp_dir" checkout --orphan "$GH_PAGES_BRANCH"
+            git -C "$temp_dir" rm -rf . 2>/dev/null || true
         fi
         
         # Copy dashboard files
@@ -219,26 +232,26 @@ deploy_to_github() {
         cp -r "$PROJECT_DIR"/* "$temp_dir/" 2>/dev/null || true
         
         # Remove unnecessary files for GitHub Pages
-        rm -rf "$temp_dir/scripts" "$temp_dir/logs" "$temp_dir/.git" 2>/dev/null || true
+        rm -rf "$temp_dir/scripts" "$temp_dir/logs" 2>/dev/null || true
         
-        # Configure git
-        git config user.name "Automated Update Bot"
-        git config user.email "update-bot@example.com"
+        # Configure commit identity in the temporary clone only.
+        git -C "$temp_dir" config --local user.name "Automated Update Bot"
+        git -C "$temp_dir" config --local user.email "update-bot@example.com"
         
         # Add and commit changes
-        git add .
+        git -C "$temp_dir" add .
         
-        if git diff --cached --quiet; then
+        if git -C "$temp_dir" diff --cached --quiet; then
             log_info "No changes to deploy"
         else
             local commit_message="Update roadmap data - $(date '+%Y-%m-%d %H:%M:%S UTC')"
-            git commit -m "$commit_message"
+            git -C "$temp_dir" commit -m "$commit_message"
             
             # Push to GitHub
             log_info "Pushing to GitHub..."
-            if git push origin "$GH_PAGES_BRANCH" --quiet; then
+            if git -C "$temp_dir" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" push origin "$GH_PAGES_BRANCH" --quiet; then
                 log_success "Successfully deployed to GitHub Pages"
-                log_info "Your dashboard will be available at: https://$(echo $GITHUB_REPO | tr '[:upper:]' '[:lower:]' | cut -d'/' -f1).github.io/$(echo $GITHUB_REPO | cut -d'/' -f2)/"
+                log_info "Your dashboard will be available at: https://$(echo "$GITHUB_REPO" | tr '[:upper:]' '[:lower:]' | cut -d'/' -f1).github.io/$(echo "$GITHUB_REPO" | cut -d'/' -f2)/"
             else
                 log_error "Failed to push to GitHub Pages"
                 exit 1
@@ -256,10 +269,24 @@ generate_summary() {
     
     local summary_file="$PROJECT_DIR/logs/last-update-summary.json"
     local data_file="$DATA_DIR/roadmap-data.json"
+    local health_file="$DATA_DIR/health-status.json"
     
     if [ -f "$data_file" ]; then
-        local total_items=$(jq '.metadata.totalItems // .items | length' "$data_file" 2>/dev/null || echo "unknown")
+        local total_items=$(jq -r '.metadata.totalItems // (.items | length) // null' "$data_file" 2>/dev/null || echo "null")
         local last_updated=$(jq -r '.metadata.lastUpdated // "unknown"' "$data_file" 2>/dev/null || echo "unknown")
+        local health_status="unknown"
+        local source_status="unknown"
+        local last_successful_update="unknown"
+
+        if [ -f "$health_file" ]; then
+            health_status=$(jq -r '.status // "unknown"' "$health_file" 2>/dev/null || echo "unknown")
+            source_status=$(jq -r '.source.status // "unknown"' "$health_file" 2>/dev/null || echo "unknown")
+            last_successful_update=$(jq -r '.lastSuccessfulUpdate // "unknown"' "$health_file" 2>/dev/null || echo "unknown")
+            total_items=$(jq -r '.metrics.itemCount // empty' "$health_file" 2>/dev/null || echo "$total_items")
+            if [ -z "$total_items" ]; then
+                total_items=$(jq -r '.metadata.totalItems // (.items | length) // null' "$data_file" 2>/dev/null || echo "null")
+            fi
+        fi
         
         cat > "$summary_file" << EOF
 {
@@ -267,8 +294,12 @@ generate_summary() {
     "success": true,
     "totalItems": $total_items,
     "lastDataUpdate": "$last_updated",
+    "lastSuccessfulUpdate": "$last_successful_update",
+    "healthStatus": "$health_status",
+    "sourceStatus": "$source_status",
     "deployed": $DEPLOY,
-    "dataFile": "$data_file"
+    "dataFile": "$data_file",
+    "healthFile": "$health_file"
 }
 EOF
         
@@ -279,6 +310,9 @@ EOF
             echo "Update Summary:"
             echo "  Total Items: $total_items"
             echo "  Last Updated: $last_updated"
+            echo "  Last Successful Update: $last_successful_update"
+            echo "  Health Status: $health_status"
+            echo "  Source Status: $source_status"
             echo "  Deployed: $DEPLOY"
             echo
         fi
@@ -293,6 +327,7 @@ main() {
     log_info "Project directory: $PROJECT_DIR"
     
     check_nodejs
+    check_dependencies
     create_directories
     update_data
     deploy_to_github
