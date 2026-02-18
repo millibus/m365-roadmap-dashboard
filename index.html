@@ -11,76 +11,71 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">
-                    <i class="fab fa-microsoft"></i>
-                    <h1>Microsoft 365 Roadmap</h1>
-                </div>
-                <div class="header-stats">
-                    <div class="stat-item">
-                        <span class="stat-number" id="total-items">0</span>
-                        <span class="stat-label">Total Items</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number" id="in-development">0</span>
-                        <span class="stat-label">In Development</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number" id="rolling-out">0</span>
-                        <span class="stat-label">Rolling Out</span>
-                    </div>
-                </div>
-            </div>
-            <!-- Refresh Status -->
-            <div class="refresh-status">
-                <div class="refresh-info">
-                    <i class="fas fa-sync-alt"></i>
-                    <span id="last-update">Loading...</span>
-                    <span class="divider">•</span>
-                    <span id="next-update">Next update: Daily at 5:00 AM PT</span>
-                </div>
-            </div>
-            </div>
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <i class="fab fa-microsoft" aria-hidden="true"></i>
+            <span>M365 Roadmap</span>
+        </div>
+        <div class="topbar-search">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="text" id="search-input" placeholder="Search features, descriptions..." aria-label="Search features">
+            <button id="clear-search" class="clear-btn" style="display: none;" aria-label="Clear search">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="topbar-meta">
+            <i class="fas fa-sync-alt" aria-hidden="true"></i>
+            <span id="last-update">Loading...</span>
+            <span class="meta-divider" aria-hidden="true">·</span>
+            <span id="next-update">Next update: Daily at 5:00 AM PT</span>
+            <button id="refresh-data" class="refresh-btn" aria-label="Refresh data">
+                <i class="fas fa-redo" aria-hidden="true"></i>
+            </button>
         </div>
     </header>
 
-    <!-- Controls -->
-    <section class="controls">
-        <div class="container">
-            <div class="controls-row">
-                <div class="search-container">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="search-input" placeholder="Search features, descriptions...">
-                    <button id="clear-search" class="clear-btn" style="display: none;">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                
-                <div class="filter-container">
-                    <select id="service-filter">
+    <!-- App Shell -->
+    <div class="app-shell">
+
+        <!-- Sidebar -->
+        <aside class="sidebar" aria-label="Filters">
+            <div class="sidebar-inner">
+                <p class="sidebar-heading">Filters</p>
+
+                <div class="filter-group">
+                    <label class="filter-label" for="service-filter">Service</label>
+                    <select id="service-filter" aria-label="Filter by service">
                         <option value="">All Services</option>
                     </select>
-                    
-                    <select id="status-filter">
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label" for="status-filter">Status</label>
+                    <select id="status-filter" aria-label="Filter by status">
                         <option value="">All Statuses</option>
                         <option value="In development">In Development</option>
                         <option value="Rolling out">Rolling Out</option>
                         <option value="Launched">Launched</option>
                         <option value="General Availability">General Availability</option>
                     </select>
-                    
-                    <select id="platform-filter">
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label" for="platform-filter">Platform</label>
+                    <select id="platform-filter" aria-label="Filter by platform">
                         <option value="">All Platforms</option>
                     </select>
-                    
-                    <select id="timeline-filter">
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label" for="timeline-filter">Timeline</label>
+                    <select id="timeline-filter" aria-label="Filter by timeline">
                         <option value="">All Timeline</option>
                         <option value="current-month">This Month</option>
                         <option value="next-month">Next Month</option>
@@ -90,103 +85,140 @@
                         <option value="next-year">Next Year</option>
                     </select>
                 </div>
-                
-                <div class="view-controls">
-                    <button class="view-btn active" data-view="cards">
-                        <i class="fas fa-th-large"></i> Cards
-                    </button>
-                    <button class="view-btn" data-view="timeline">
-                        <i class="fas fa-timeline"></i> Timeline
-                    </button>
-                    <button class="view-btn" data-view="table">
-                        <i class="fas fa-table"></i> Table
-                    </button>
-                </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <div class="container">
-            <!-- Loading State -->
-            <div id="loading" class="loading">
-                <div class="spinner"></div>
-                <p>Loading roadmap data...</p>
-            </div>
-
-            <!-- Error State -->
-            <div id="error" class="error-state" style="display: none;">
-                <i class="fas fa-exclamation-triangle"></i>
-                <h3>Failed to load roadmap data</h3>
-                <p>Please check your connection and try again.</p>
-                <button id="retry-btn" class="btn-primary">Retry</button>
-            </div>
-
-            <!-- Results Info -->
-            <div id="results-info" class="results-info" style="display: none;">
-                <span id="results-count">0</span> items found
-                <button id="clear-filters" class="clear-filters-btn" style="display: none;">
+                <button id="clear-filters" class="sidebar-clear-btn" style="display: none;">
                     Clear All Filters
                 </button>
             </div>
+        </aside>
 
-            <!-- Cards View -->
-            <div id="cards-view" class="cards-grid">
-                <!-- Cards will be populated here -->
-            </div>
+        <!-- Main -->
+        <main class="main">
 
-            <!-- Timeline View -->
-            <div id="timeline-view" class="timeline-container" style="display: none;">
-                <div class="timeline">
-                    <!-- Timeline items will be populated here -->
+            <!-- KPI Strip -->
+            <div class="kpi-strip">
+                <div class="kpi-card kpi-total">
+                    <div class="kpi-icon"><i class="fas fa-layer-group" aria-hidden="true"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-value" id="total-items">0</div>
+                        <div class="kpi-label">Total Items</div>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-dev">
+                    <div class="kpi-icon"><i class="fas fa-code" aria-hidden="true"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-value" id="in-development">0</div>
+                        <div class="kpi-label">In Development</div>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-rolling">
+                    <div class="kpi-icon"><i class="fas fa-rocket" aria-hidden="true"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-value" id="rolling-out">0</div>
+                        <div class="kpi-label">Rolling Out</div>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-launched">
+                    <div class="kpi-icon"><i class="fas fa-check-circle" aria-hidden="true"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-value" id="stat-launched">0</div>
+                        <div class="kpi-label">Launched</div>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-quarter">
+                    <div class="kpi-icon"><i class="fas fa-calendar-alt" aria-hidden="true"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-value" id="stat-quarter">0</div>
+                        <div class="kpi-label">This Quarter</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Table View -->
-            <div id="table-view" class="table-container" style="display: none;">
-                <table class="roadmap-table">
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th>Service</th>
-                            <th>Status</th>
-                            <th>Platform</th>
-                            <th>Timeline</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Table rows will be populated here -->
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- No Results -->
-            <div id="no-results" class="no-results" style="display: none;">
-                <i class="fas fa-search"></i>
-                <h3>No results found</h3>
-                <p>Try adjusting your search or filters</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-info">
-                    <p>&copy; 2026 Microsoft 365 Roadmap Dashboard</p>
-                    <p>Data sourced from Microsoft's official roadmap API</p>
+            <!-- Content Toolbar -->
+            <div class="content-toolbar">
+                <div id="results-info" class="results-info" style="display: none;">
+                    <span id="results-count">0</span> items found
                 </div>
-                <div class="footer-links">
-                    <a href="https://www.microsoft.com/en-us/microsoft-365/roadmap" target="_blank" rel="noopener noreferrer">Official Roadmap</a>
-                    <a href="https://github.com/millibus/m365-roadmap-dashboard" target="_blank" rel="noopener noreferrer">GitHub</a>
-                    <button id="refresh-data" class="refresh-btn">
-                        <i class="fas fa-sync-alt"></i> Refresh Data
+                <div class="view-controls">
+                    <button class="view-btn active" data-view="cards" aria-label="Cards view">
+                        <i class="fas fa-th-large" aria-hidden="true"></i> Cards
+                    </button>
+                    <button class="view-btn" data-view="timeline" aria-label="Timeline view">
+                        <i class="fas fa-stream" aria-hidden="true"></i> Timeline
+                    </button>
+                    <button class="view-btn" data-view="table" aria-label="Table view">
+                        <i class="fas fa-table" aria-hidden="true"></i> Table
                     </button>
                 </div>
             </div>
-        </div>
+
+            <!-- Content Area -->
+            <div class="content-area">
+
+                <!-- Loading State -->
+                <div id="loading" class="loading">
+                    <div class="spinner" role="status" aria-label="Loading"></div>
+                    <p>Loading roadmap data...</p>
+                </div>
+
+                <!-- Error State -->
+                <div id="error" class="error-state" style="display: none;">
+                    <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                    <h3>Failed to load roadmap data</h3>
+                    <p>Please check your connection and try again.</p>
+                    <button id="retry-btn" class="btn-primary">Retry</button>
+                </div>
+
+                <!-- Cards View -->
+                <div id="cards-view" class="cards-grid">
+                    <!-- Cards populated by JS -->
+                </div>
+
+                <!-- Timeline View -->
+                <div id="timeline-view" class="timeline-container" style="display: none;">
+                    <div class="timeline">
+                        <!-- Timeline items populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Table View -->
+                <div id="table-view" class="table-container" style="display: none;">
+                    <table class="roadmap-table">
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>Service</th>
+                                <th>Status</th>
+                                <th>Platform</th>
+                                <th>Timeline</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Table rows populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- No Results -->
+                <div id="no-results" class="no-results" style="display: none;">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <h3>No results found</h3>
+                    <p>Try adjusting your search or filters</p>
+                </div>
+
+            </div><!-- /.content-area -->
+
+        </main>
+
+    </div><!-- /.app-shell -->
+
+    <!-- Footer -->
+    <footer class="page-footer">
+        <span>&copy; 2026 M365 Roadmap Dashboard</span>
+        <span class="meta-divider" aria-hidden="true">·</span>
+        <a href="https://www.microsoft.com/en-us/microsoft-365/roadmap" target="_blank" rel="noopener noreferrer">Official Roadmap</a>
+        <span class="meta-divider" aria-hidden="true">·</span>
+        <a href="https://github.com/millibus/m365-roadmap-dashboard" target="_blank" rel="noopener noreferrer">GitHub</a>
     </footer>
 
     <!-- Scripts -->

@@ -481,7 +481,8 @@ class M365RoadmapDashboard {
     createCard(item) {
         if (!item || typeof item.title !== 'string') return null;
         const card = document.createElement('div');
-        card.className = 'roadmap-card';
+        const statusSlug = (item.status || '').toLowerCase().replace(/\s+/g, '-');
+        card.className = `roadmap-card status-${statusSlug}`;
 
         const products = this.safeTagList(item.tagsContainer?.products);
         const platforms = this.safeTagList(item.tagsContainer?.platforms);
@@ -492,24 +493,15 @@ class M365RoadmapDashboard {
         card.innerHTML = `
             <div class="card-header">
                 <h3 class="card-title">${this.escapeHtml(item.title)}</h3>
-                <div class="card-id">#${this.escapeHtml(String(item.id != null ? item.id : ''))}</div>
+                <div class="card-date">${this.escapeHtml(date)}</div>
             </div>
             <div class="card-description">
                 ${this.escapeHtml(this.safeDescription(item.description))}
             </div>
             <div class="card-tags">
+                <span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(releasePhase)}</span>
                 <span class="tag">${this.escapeHtml(products)}</span>
                 ${platforms ? `<span class="tag">${this.escapeHtml(platforms)}</span>` : ''}
-                <span class="tag status ${this.getStatusClass(item.status)}">${this.escapeHtml(releasePhase)}</span>
-            </div>
-            <div class="card-footer">
-                <div class="card-date">
-                    <i class="fas fa-calendar"></i>
-                    ${this.escapeHtml(date)}
-                </div>
-                <button class="expand-btn" data-expand="card">
-                    Show More
-                </button>
             </div>
         `;
         const expandBtn = card.querySelector('[data-expand="card"]');
@@ -602,10 +594,21 @@ class M365RoadmapDashboard {
             item.status === 'In development').length;
         document.getElementById('in-development').textContent = inDevelopment;
         
-        const rollingOut = this.allData.filter(item => 
+        const rollingOut = this.allData.filter(item =>
             item.status === 'Rolling out' || item.status === 'General Availability').length;
         document.getElementById('rolling-out').textContent = rollingOut;
-        
+
+        // Launched count
+        const launched = this.allData.filter(i => i.status === 'Launched').length;
+        const launchedEl = document.getElementById('stat-launched');
+        if (launchedEl) launchedEl.textContent = launched;
+
+        // This quarter count
+        const quarterCount = this.allData.filter(i =>
+            this.matchesTimeline(i, 'this-quarter')).length;
+        const quarterEl = document.getElementById('stat-quarter');
+        if (quarterEl) quarterEl.textContent = quarterCount;
+
         this.updateRefreshStatus();
     }
     
